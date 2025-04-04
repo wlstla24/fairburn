@@ -3,7 +3,6 @@ import requests
 YOUR_API_KEY = "msy_ZSlSbBAI5C3wXBHh3b9YFcStXGiUMhiBdl2d"
 
 
-
 payload = {
   "mode": "preview",
   "prompt": "a monster mask",
@@ -26,3 +25,4 @@ response = requests.post(
 )
 response.raise_for_status()
 print(response.json())
+
