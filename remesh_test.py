@@ -44,6 +44,9 @@ TaskID = str
 # sample remesh task ID
 # {"result":"01960220-1de2-7292-9928-284489303618"}
 
+# type alias for the model URL format
+ModelURLFormat = Literal["glb", "fbx", "obj", "usdz", "blend", "stl"]
+
 
 class RemeshTaskOptions:
     """
@@ -56,7 +59,7 @@ class RemeshTaskOptions:
         # The ID of the input task to be remeshed
         self.input_task_id: TaskID = task_id
         # The target formats for the remeshed model
-        self.__target_formats: list[Literal["glb", "fbx", "obj", "usdz", "blend", "stl"]] = ["glb"]
+        self.__target_formats: list[ModelURLFormat] = ["glb"]
         # The topology of the remeshed model (quad or triangle)
         self.__topology: Literal["quad", "triangle"] = "triangle"
         # The target polygon count for the remeshed model
@@ -68,7 +71,7 @@ class RemeshTaskOptions:
 
 
     @property
-    def target_formats(self) -> list[Literal["glb", "fbx", "obj", "usdz", "blend", "stl"]]:
+    def target_formats(self) -> list[ModelURLFormat]:
         """
         Get the target formats for the remeshed model.
         """
@@ -77,13 +80,13 @@ class RemeshTaskOptions:
     @target_formats.setter
     def target_formats(
             self,
-            target_formats: list[Literal["glb", "fbx", "obj", "usdz", "blend", "stl"]]):
+            target_formats: list[ModelURLFormat]):
         """
         Set the target formats for the remeshed model.
         """
         if not target_formats:
             raise ValueError("Target formats must be a non-empty list")
-        if not all(format in ["glb", "fbx", "obj", "usdz", "blend", "stl"] for format in target_formats):
+        if not all(format in ModelURLFormat for format in target_formats):
             raise ValueError("Invalid target format")
         self.__target_formats = target_formats
 
@@ -294,11 +297,10 @@ class RemeshTaskPendingResult:
     A class representing the pending result of a remesh task.
     """
     def __init__(
-        self,
-        task_id: TaskID,
-        created_at: int,
-        preceding_tasks: int
-    ):
+            self,
+            task_id: TaskID,
+            created_at: int,
+            preceding_tasks: int):
         self.task_id: TaskID = task_id
         self.created_at: int = created_at
         self.preceding_tasks: int = preceding_tasks
@@ -326,9 +328,12 @@ class RemeshTaskInProgressResult:
     """
     A class representing the in-progress result of a remesh task.
     """
-    def __init__(self, task_id: TaskID):
+    def __init__(
+            self,
+            task_id: TaskID,
+            progress: int):
         self.task_id: TaskID = task_id
-        self.progress: int = 0
+        self.progress: int = progress
 
     def get_progress(self) -> int:
         """
@@ -337,8 +342,70 @@ class RemeshTaskInProgressResult:
         return self.progress
 
 
+class RemeshTaskSucceededResult:
+    """
+    A class representing the succeeded result of a remesh task.
+    """
+    def __init__(
+            self,
+            task_id: TaskID,
+            model_urls: dict[ModelURLFormat, str]):
+        self.task_id: TaskID = task_id
+        self.model_urls: dict[ModelURLFormat, str] = model_urls
+
+    def get_task_id(self) -> TaskID:
+        """
+        Get the ID of the remesh task.
+        """
+        return self.task_id
+
+    def get_model_urls(self) -> dict[ModelURLFormat, str]:
+        """
+        Get the model URLs of the remesh task.
+        """
+        return self.model_urls
 
 
+class RemeshTaskFailedResult:
+    """
+    A class representing the failed result of a remesh task.
+    """
+    def __init__(self, task_id: TaskID, task_error: dict[str, str]):
+        self.task_id: TaskID = task_id
+        self.task_error: dict[str, str] = task_error
+
+    def get_task_id(self) -> TaskID:
+        """
+        Get the ID of the remesh task.
+        """
+        return self.task_id
+    
+    def get_task_error(self) -> dict[str, str]:
+        """
+        Get the task error of the remesh task.
+        """
+        return self.task_error
+
+
+class RemeshTaskCanceledResult:
+    """
+    A class representing the canceled result of a remesh task.
+    """
+    def __init__(self, task_id: TaskID):
+        self.task_id: TaskID = task_id
+
+    def get_task_id(self) -> TaskID:
+        """
+        Get the ID of the remesh task.
+        """
+        return self.task_id
+
+
+RemeshTaskResult = RemeshTaskPendingResult | \
+    RemeshTaskInProgressResult | \
+    RemeshTaskSucceededResult | \
+    RemeshTaskFailedResult | \
+    RemeshTaskCanceledResult
 
 def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
     """
@@ -346,6 +413,9 @@ def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
     This function streams the response and prints the status of the task until it is completed.
     Args:
         task_id (TaskID): The ID of the remesh task to wait for.
+    Returns:
+        None | RemeshTaskResult
+        The result of the remesh task.
     """
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -367,19 +437,36 @@ def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
                 data = json.loads(line.decode("utf-8")[5:])
                 print(data)
 
-                if data["status"] in ["SUCCEEDED", "FAILED", "CANCELED"]:
-                    result = RemeshTaskResult(
+                if data["status"] == "PENDING":
+                    result = RemeshTaskPendingResult(
                         task_id=data["id"],
-                        model_urls=data["model_urls"],
-                        progress=data["progress"],
-                        status=data["status"],
-                        preceding_tasks=data["preceding_tasks"],
                         created_at=data["created_at"],
-                        started_at=data["started_at"],
-                        finished_at=data["finished_at"],
+                        preceding_tasks=data["preceding_tasks"]
+                    )
+                elif data["status"] == "IN_PROGRESS":
+                    result = RemeshTaskInProgressResult(
+                        task_id=data["id"],
+                        progress=data["progress"]
+                    )
+                elif data["status"] == "SUCCEEDED":
+                    result = RemeshTaskSucceededResult(
+                        task_id=data["id"],
+                        model_urls=data["model_urls"]
+                    )
+                    break
+                elif data["status"] == "FAILED":
+                    result = RemeshTaskFailedResult(
+                        task_id=data["id"],
                         task_error=data["task_error"]
                     )
                     break
+                elif data["status"] == "CANCELED":
+                    result = RemeshTaskCanceledResult(
+                        task_id=data["id"]
+                    )
+                    break
+                else:
+                    raise ValueError(f"Invalid status: {data['status']}")
 
     response.close()
 
