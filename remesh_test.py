@@ -379,7 +379,7 @@ class RemeshTaskFailedResult:
         Get the ID of the remesh task.
         """
         return self.task_id
-    
+
     def get_task_error(self) -> dict[str, str]:
         """
         Get the task error of the remesh task.
