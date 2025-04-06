@@ -505,21 +505,22 @@ def wait_for_remesh_task(
     return waiting_result
 
 
-SAMPLE_PREVIEW_TASK_ID = "01960209-84b2-7067-98a2-3ce4c998bf29"
+if __name__ == "__main__":
+    SAMPLE_PREVIEW_TASK_ID = "01960209-84b2-7067-98a2-3ce4c998bf29"
 
-remesh_task_options = RemeshTaskOptions(SAMPLE_PREVIEW_TASK_ID)
-remesh_task_id = create_remesh_task(remesh_task_options)
-result = wait_for_remesh_task(remesh_task_id,
-    on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
-    on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
-)
-result = wait_for_remesh_task(remesh_task_id,
-    on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
-    on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
-)
+    remesh_task_options = RemeshTaskOptions(SAMPLE_PREVIEW_TASK_ID)
+    remesh_task_id = create_remesh_task(remesh_task_options)
+    result = wait_for_remesh_task(remesh_task_id,
+        on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
+        on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
+    )
+    result = wait_for_remesh_task(remesh_task_id,
+        on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
+        on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
+    )
 
-if result is not None:
-    if isinstance(result, RemeshTaskSucceededResult):
-        print(f"Succeeded: {result.model_urls}")
-    elif isinstance(result, RemeshTaskFailedResult):
-        print(f"Failed: {result.task_id}")
+    if result is not None:
+        if isinstance(result, RemeshTaskSucceededResult):
+            print(f"Succeeded: {result.model_urls}")
+        elif isinstance(result, RemeshTaskFailedResult):
+            print(f"Failed: {result.task_id}")
