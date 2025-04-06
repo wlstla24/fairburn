@@ -210,129 +210,44 @@ def create_remesh_task(options: RemeshTaskOptions) -> TaskID:
 # PENDING -> IN_PROGRESS -> SUCCEEDED | FAILED | CANCELED
 
 
-class RemeshTaskPendingResult:
+class RemeshTaskPendingResult(BaseModel):
     """
     A class representing the pending result of a remesh task.
     """
-    def __init__(
-            self,
-            task_id: TaskID,
-            created_at: int,
-            preceding_tasks: int):
-        self.__task_id: TaskID = task_id
-        self.__created_at: int = created_at
-        self.__preceding_tasks: int = preceding_tasks
-
-    @property
-    def task_id(self) -> TaskID:
-        """
-        Get the ID of the remesh task.
-        """
-        return self.__task_id
-
-    @property
-    def created_at(self) -> int:
-        """
-        Get the creation time of the remesh task.
-        """
-        return self.__created_at
-
-    @property
-    def preceding_tasks(self) -> int:
-        """
-        Get the number of preceding tasks.
-        """
-        return self.__preceding_tasks
+    task_id: TaskID
+    created_at: int
+    preceding_tasks: int
 
 
-class RemeshTaskInProgressResult:
+class RemeshTaskInProgressResult(BaseModel):
     """
     A class representing the in-progress result of a remesh task.
     """
-    def __init__(
-            self,
-            task_id: TaskID,
-            progress: int):
-        self.__task_id: TaskID = task_id
-        self.__progress: int = progress
-
-    @property
-    def task_id(self) -> TaskID:
-        """
-        Get the ID of the remesh task.
-        """
-        return self.__task_id
-
-    @property
-    def progress(self) -> int:
-        """
-        Get the progress of the remesh task.
-        """
-        return self.__progress
+    task_id: TaskID
+    progress: int
 
 
-class RemeshTaskSucceededResult:
+class RemeshTaskSucceededResult(BaseModel):
     """
     A class representing the succeeded result of a remesh task.
     """
-    def __init__(
-            self,
-            task_id: TaskID,
-            model_urls: dict[ModelURLFormat, str]):
-        self.__task_id: TaskID = task_id
-        self.__model_urls: dict[ModelURLFormat, str] = model_urls
-
-    @property
-    def task_id(self) -> TaskID:
-        """
-        Get the ID of the remesh task.
-        """
-        return self.__task_id
-
-    @property
-    def model_urls(self) -> dict[ModelURLFormat, str]:
-        """
-        Get the model URLs of the remesh task.
-        """
-        return self.__model_urls
+    task_id: TaskID
+    model_urls: dict[ModelURLFormat, str]
 
 
-class RemeshTaskFailedResult:
+class RemeshTaskFailedResult(BaseModel):
     """
     A class representing the failed result of a remesh task.
     """
-    def __init__(self, task_id: TaskID, task_error: dict[str, str]):
-        self.__task_id: TaskID = task_id
-        self.__task_error: dict[str, str] = task_error
-
-    @property
-    def task_id(self) -> TaskID:
-        """
-        Get the ID of the remesh task.
-        """
-        return self.__task_id
-
-    @property
-    def task_error(self) -> dict[str, str]:
-        """
-        Get the task error of the remesh task.
-        """
-        return self.__task_error
+    task_id: TaskID
+    task_error: dict[str, str]
 
 
-class RemeshTaskCanceledResult:
+class RemeshTaskCanceledResult(BaseModel):
     """
     A class representing the canceled result of a remesh task.
     """
-    def __init__(self, task_id: TaskID):
-        self.__task_id: TaskID = task_id
-
-    @property
-    def task_id(self) -> TaskID:
-        """
-        Get the ID of the remesh task.
-        """
-        return self.__task_id
+    task_id: TaskID
 
 
 RemeshTaskResult = Union[
@@ -423,7 +338,9 @@ def wait_for_remesh_task(
 if __name__ == "__main__":
     SAMPLE_PREVIEW_TASK_ID = "01960209-84b2-7067-98a2-3ce4c998bf29"
 
-    remesh_task_options = RemeshTaskOptions(SAMPLE_PREVIEW_TASK_ID)
+    remesh_task_options = RemeshTaskOptions(
+        input_task_id=SAMPLE_PREVIEW_TASK_ID,
+    )
     remesh_task_id = create_remesh_task(remesh_task_options)
     result = wait_for_remesh_task(remesh_task_id,
         on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
