@@ -4,6 +4,7 @@ This script demonstrates how to create a remeshing task using the Meshy API.
 import json
 from typing import Any, Callable, Literal, Union
 import requests
+from pydantic import BaseModel, Field, field_validator
 
 
 API_KEY = "msy_wcadg4TtNWPbH08rGNfI7mbuFqZ6zmyOPul6"
@@ -50,124 +51,38 @@ TaskID = str
 ModelURLFormat = Literal["glb", "fbx", "obj", "usdz", "blend", "stl"]
 
 
-class RemeshTaskOptions:
+class RemeshTaskOptions(BaseModel):
     """
     A class representing the options for a remeshing task.
     """
-    def __init__(self, task_id: TaskID):
-        """
-        Initializes a RemeshTaskOptions object.
-        """
-        # The ID of the input task to be remeshed
-        self.input_task_id: TaskID = task_id
-        # The target formats for the remeshed model
-        self.__target_formats: list[ModelURLFormat] = ["glb"]
-        # The topology of the remeshed model (quad or triangle)
-        self.__topology: Literal["quad", "triangle"] = "triangle"
-        # The target polygon count for the remeshed model
-        self.__target_polycount: int = 30000
-        # Resize the model to a certain height in meters (0.0 means no resize)
-        self.__resize_height: float = 1.0
-         # Position of the model origin (bottom or center)
-        self.__origin_at: Literal["bottom", "center"] = "bottom"
+    input_task_id: TaskID
+    target_formats: list[ModelURLFormat] = Field(default=["glb"], min_items=1)
+    topology: Literal["quad", "triangle"] = Field(default="triangle")
+    target_polycount: int = Field(default=30000, ge=100, le=300_000)
+    resize_height: float = Field(default=1.0, gt=0)
+    origin_at: Literal["bottom", "center"] = Field(default="bottom")
 
-
-    @property
-    def target_formats(self) -> list[ModelURLFormat]:
+    @field_validator("target_formats")
+    @classmethod
+    def validate_target_formats(cls, v: list[ModelURLFormat]) -> list[ModelURLFormat]:
         """
-        Get the target formats for the remeshed model.
+        Validate the target formats.
+        Args:
+            v: The list of target formats.
+        Returns:
+            The list of target formats.
+        Raises:
+            ValueError: If the target format is invalid.
         """
-        return self.__target_formats
-
-    @target_formats.setter
-    def target_formats(
-            self,
-            target_formats: list[ModelURLFormat]):
-        """
-        Set the target formats for the remeshed model.
-        """
-        if not target_formats:
-            raise ValueError("Target formats must be a non-empty list")
-        if not all(format in ModelURLFormat for format in target_formats):
+        if not all(format in ModelURLFormat for format in v):
             raise ValueError("Invalid target format")
-        self.__target_formats = target_formats
-
-    @property
-    def topology(self) -> Literal["quad", "triangle"]:
-        """
-        Get the topology for the remeshed model.
-        """
-        return self.__topology
-
-    @topology.setter
-    def topology(self, topology: Literal["quad", "triangle"]):
-        """
-        Set the topology for the remeshed model.
-        """
-        if topology not in ["quad", "triangle"]:
-            raise ValueError("Invalid topology")
-        self.__topology = topology
-
-    @property
-    def target_polycount(self) -> int:
-        """
-        Get the target polygon count for the remeshed model.
-        """
-        return self.__target_polycount
-
-    @target_polycount.setter
-    def target_polycount(self, target_polycount: int):
-        """
-        Set the target polygon count for the remeshed model.
-        """
-        if target_polycount < 100 or target_polycount > 300_000:
-            raise ValueError("Target polygon count must be between 100 and 3000000")
-        self.__target_polycount = target_polycount
-
-    @property
-    def resize_height(self) -> float:
-        """
-        Get the resize height for the remeshed model.
-        """
-        return self.__resize_height
-
-    @resize_height.setter
-    def resize_height(self, resize_height: float):
-        """
-        Set the resize height for the remeshed model.
-        """
-        if resize_height < 0:
-            raise ValueError("Resize height must be greater than 0")
-        self.__resize_height = resize_height
-
-    @property
-    def origin_at(self) -> Literal["bottom", "center"]:
-        """
-        Get the origin position for the remeshed model.
-        """
-        return self.__origin_at
-
-    @origin_at.setter
-    def origin_at(self, origin_at: Literal["bottom", "center"]):
-        """
-        Set the origin position for the remeshed model.
-        """
-        if origin_at not in ["bottom", "center"]:
-            raise ValueError("Invalid origin position")
-        self.__origin_at = origin_at
+        return v
 
     def payload(self) -> dict[str, Any]:
         """
         Returns a dictionary containing the payload for the remesh task.
         """
-        return {
-            "input_task_id": self.input_task_id,
-            "target_formats": self.__target_formats,
-            "topology": self.__topology,
-            "target_polycount": self.__target_polycount,
-            "resize_height": self.__resize_height,
-            "origin_at": self.__origin_at
-        }
+        return self.model_dump()
 
 
 def create_remesh_task(options: RemeshTaskOptions) -> TaskID:
