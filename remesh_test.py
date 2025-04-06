@@ -2,10 +2,12 @@
 This script demonstrates how to create a remeshing task using the Meshy API.
 """
 import json
-from typing import Any, Literal
+from typing import Any, Callable, Literal, Union
 import requests
 
+
 API_KEY = "msy_wcadg4TtNWPbH08rGNfI7mbuFqZ6zmyOPul6"
+
 
 # type alias for the task ID
 TaskID = str
@@ -154,7 +156,7 @@ class RemeshTaskOptions:
             raise ValueError("Invalid origin position")
         self.__origin_at = origin_at
 
-    def get_payload(self) -> dict[str, Any]:
+    def payload(self) -> dict[str, Any]:
         """
         Returns a dictionary containing the payload for the remesh task.
         """
@@ -181,7 +183,7 @@ def create_remesh_task(options: RemeshTaskOptions) -> TaskID:
     Raises:
         requests.exceptions.HTTPError: If the HTTP request to the API fails.
     """
-    payload = options.get_payload()
+    payload = options.payload()
     headers = {
         "Authorization": f"Bearer {API_KEY}"
     }
@@ -201,6 +203,7 @@ def create_remesh_task(options: RemeshTaskOptions) -> TaskID:
     response_remesh_task_id = response.json()["result"]
 
     return response_remesh_task_id
+
 
 # {
 #   "id": "0193bfc5-ee4f-73f8-8525-44b398884ce9",
@@ -301,27 +304,30 @@ class RemeshTaskPendingResult:
             task_id: TaskID,
             created_at: int,
             preceding_tasks: int):
-        self.task_id: TaskID = task_id
-        self.created_at: int = created_at
-        self.preceding_tasks: int = preceding_tasks
+        self.__task_id: TaskID = task_id
+        self.__created_at: int = created_at
+        self.__preceding_tasks: int = preceding_tasks
 
-    def get_created_at(self) -> int:
-        """
-        Get the creation time of the remesh task.
-        """
-        return self.created_at
-
-    def get_preceding_tasks(self) -> int:
-        """
-        Get the number of preceding tasks.
-        """
-        return self.preceding_tasks
-
-    def get_task_id(self) -> TaskID:
+    @property
+    def task_id(self) -> TaskID:
         """
         Get the ID of the remesh task.
         """
-        return self.task_id
+        return self.__task_id
+
+    @property
+    def created_at(self) -> int:
+        """
+        Get the creation time of the remesh task.
+        """
+        return self.__created_at
+
+    @property
+    def preceding_tasks(self) -> int:
+        """
+        Get the number of preceding tasks.
+        """
+        return self.__preceding_tasks
 
 
 class RemeshTaskInProgressResult:
@@ -332,14 +338,22 @@ class RemeshTaskInProgressResult:
             self,
             task_id: TaskID,
             progress: int):
-        self.task_id: TaskID = task_id
-        self.progress: int = progress
+        self.__task_id: TaskID = task_id
+        self.__progress: int = progress
 
-    def get_progress(self) -> int:
+    @property
+    def task_id(self) -> TaskID:
+        """
+        Get the ID of the remesh task.
+        """
+        return self.__task_id
+
+    @property
+    def progress(self) -> int:
         """
         Get the progress of the remesh task.
         """
-        return self.progress
+        return self.__progress
 
 
 class RemeshTaskSucceededResult:
@@ -350,20 +364,22 @@ class RemeshTaskSucceededResult:
             self,
             task_id: TaskID,
             model_urls: dict[ModelURLFormat, str]):
-        self.task_id: TaskID = task_id
-        self.model_urls: dict[ModelURLFormat, str] = model_urls
+        self.__task_id: TaskID = task_id
+        self.__model_urls: dict[ModelURLFormat, str] = model_urls
 
-    def get_task_id(self) -> TaskID:
+    @property
+    def task_id(self) -> TaskID:
         """
         Get the ID of the remesh task.
         """
-        return self.task_id
+        return self.__task_id
 
-    def get_model_urls(self) -> dict[ModelURLFormat, str]:
+    @property
+    def model_urls(self) -> dict[ModelURLFormat, str]:
         """
         Get the model URLs of the remesh task.
         """
-        return self.model_urls
+        return self.__model_urls
 
 
 class RemeshTaskFailedResult:
@@ -371,20 +387,22 @@ class RemeshTaskFailedResult:
     A class representing the failed result of a remesh task.
     """
     def __init__(self, task_id: TaskID, task_error: dict[str, str]):
-        self.task_id: TaskID = task_id
-        self.task_error: dict[str, str] = task_error
+        self.__task_id: TaskID = task_id
+        self.__task_error: dict[str, str] = task_error
 
-    def get_task_id(self) -> TaskID:
+    @property
+    def task_id(self) -> TaskID:
         """
         Get the ID of the remesh task.
         """
-        return self.task_id
+        return self.__task_id
 
-    def get_task_error(self) -> dict[str, str]:
+    @property
+    def task_error(self) -> dict[str, str]:
         """
         Get the task error of the remesh task.
         """
-        return self.task_error
+        return self.__task_error
 
 
 class RemeshTaskCanceledResult:
@@ -392,29 +410,44 @@ class RemeshTaskCanceledResult:
     A class representing the canceled result of a remesh task.
     """
     def __init__(self, task_id: TaskID):
-        self.task_id: TaskID = task_id
+        self.__task_id: TaskID = task_id
 
-    def get_task_id(self) -> TaskID:
+    @property
+    def task_id(self) -> TaskID:
         """
         Get the ID of the remesh task.
         """
-        return self.task_id
+        return self.__task_id
 
 
-RemeshTaskResult = RemeshTaskPendingResult | \
-    RemeshTaskInProgressResult | \
-    RemeshTaskSucceededResult | \
-    RemeshTaskFailedResult | \
+RemeshTaskResult = Union[
+    RemeshTaskPendingResult,
+    RemeshTaskInProgressResult,
+    RemeshTaskSucceededResult,
+    RemeshTaskFailedResult,
     RemeshTaskCanceledResult
+]
 
-def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
+
+RemeshTaskFinishedResult = Union[
+    RemeshTaskSucceededResult,
+    RemeshTaskFailedResult,
+    RemeshTaskCanceledResult
+]
+
+
+def wait_for_remesh_task(
+        task_id: TaskID,
+        on_pending: Callable[[RemeshTaskPendingResult], None],
+        on_in_progress: Callable[[RemeshTaskInProgressResult], None],
+    ) -> None | RemeshTaskFinishedResult:
     """
     Waits for the remeshing task to complete by sending a GET request to the Meshy API.
     This function streams the response and prints the status of the task until it is completed.
     Args:
         task_id (TaskID): The ID of the remesh task to wait for.
     Returns:
-        None | RemeshTaskResult
+        None | RemeshTaskFinishedResult
         The result of the remesh task.
     """
     headers = {
@@ -429,39 +462,38 @@ def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
         timeout=10,  # Set a timeout of 10 seconds
     )
 
-    result = None
+    waiting_result = None
 
     for line in response.iter_lines():
         if line:
             if line.startswith(b"data:"):
                 data = json.loads(line.decode("utf-8")[5:])
-                print(data)
 
                 if data["status"] == "PENDING":
-                    result = RemeshTaskPendingResult(
+                    on_pending(RemeshTaskPendingResult(
                         task_id=data["id"],
                         created_at=data["created_at"],
                         preceding_tasks=data["preceding_tasks"]
-                    )
+                    ))
                 elif data["status"] == "IN_PROGRESS":
-                    result = RemeshTaskInProgressResult(
+                    on_in_progress(RemeshTaskInProgressResult(
                         task_id=data["id"],
                         progress=data["progress"]
-                    )
+                    ))
                 elif data["status"] == "SUCCEEDED":
-                    result = RemeshTaskSucceededResult(
+                    waiting_result = RemeshTaskSucceededResult(
                         task_id=data["id"],
                         model_urls=data["model_urls"]
                     )
                     break
                 elif data["status"] == "FAILED":
-                    result = RemeshTaskFailedResult(
+                    waiting_result = RemeshTaskFailedResult(
                         task_id=data["id"],
                         task_error=data["task_error"]
                     )
                     break
                 elif data["status"] == "CANCELED":
-                    result = RemeshTaskCanceledResult(
+                    waiting_result = RemeshTaskCanceledResult(
                         task_id=data["id"]
                     )
                     break
@@ -470,8 +502,24 @@ def wait_for_remesh_task(task_id: TaskID) -> None | RemeshTaskResult:
 
     response.close()
 
-    return result
+    return waiting_result
+
 
 SAMPLE_PREVIEW_TASK_ID = "01960209-84b2-7067-98a2-3ce4c998bf29"
-remesh_task_id = create_remesh_task(SAMPLE_PREVIEW_TASK_ID)
-wait_for_remesh_task(remesh_task_id)
+
+remesh_task_options = RemeshTaskOptions(SAMPLE_PREVIEW_TASK_ID)
+remesh_task_id = create_remesh_task(remesh_task_options)
+result = wait_for_remesh_task(remesh_task_id,
+    on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
+    on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
+)
+result = wait_for_remesh_task(remesh_task_id,
+    on_pending=lambda pending: print(f"Pending: {pending.task_id}"),
+    on_in_progress=lambda in_progress: print(f"In progress: {in_progress.progress}"),
+)
+
+if result is not None:
+    if isinstance(result, RemeshTaskSucceededResult):
+        print(f"Succeeded: {result.model_urls}")
+    elif isinstance(result, RemeshTaskFailedResult):
+        print(f"Failed: {result.task_id}")
