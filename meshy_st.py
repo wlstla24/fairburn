@@ -1,7 +1,7 @@
 import requests
 import json
 
-YOUR_API_KEY = "msy_ZSlSbBAI5C3wXBHh3b9YFcStXGiUMhiBdl2d"
+YOUR_API_KEY = "01961b65-be58-7a91-b9e6-89aa5ffe4b12"
 
 headers = {
     "Authorization": f"Bearer {YOUR_API_KEY}",
@@ -9,7 +9,7 @@ headers = {
 }
 
 response = requests.get(
-    'https://api.meshy.ai/openapi/v2/text-to-3d/018a210d-8ba4-705c-b111-1f1776f7f578/stream',
+    'https://api.meshy.ai/openapi/v2/text-to-3d/01961b60-271b-70d7-b910-7fc1a4dae1a0/stream',
     headers=headers,
     stream=True
 )

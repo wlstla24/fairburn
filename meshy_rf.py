@@ -1,13 +1,13 @@
-
 import requests
 
-YOUR_API_KEY = "msy_ZSlSbBAI5C3wXBHh3b9YFcStXGiUMhiBdl2d"
+YOUR_API_KEY = "msy_wcadg4TtNWPbH08rGNfI7mbuFqZ6zmyOPul6"
 
 payload = {
   "mode": "refine",
-  "preview_task_id": "018a210d-8ba4-705c-b111-1f1776f7f578",
-  "enable_pbr": True,
-  "texture_prompt": "rainbow"
+  "preview_task_id": "01961b65-be58-7a91-b9e6-89aa5ffe4b12",
+  "enable_pbr": True
+  #"ai_model": "meshy-4",
+  #"texture_prompt": "rainbow"
  }
 headers = {
   "Authorization": f"Bearer {YOUR_API_KEY}"
