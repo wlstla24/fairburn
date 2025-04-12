@@ -117,6 +117,13 @@ export const taskStreamResultSchema = z.discriminatedUnion("status", [
 ]);
 export type TaskStreamResultSchema = z.output<typeof taskStreamResultSchema>;
 
+export const taskStreamFinishResultSchema = z.discriminatedUnion("status", [
+  taskStreamResultSucceededSchema,
+  taskStreamResultFailedSchema,
+  taskStreamResultCanceledSchema,
+]);
+export type TaskStreamFinishResultSchema = z.output<typeof taskStreamFinishResultSchema>;
+
 export interface TextTo3DOptions {
     onProgress?: (progress: number) => void;
 }
@@ -127,7 +134,7 @@ export interface TextTo3DOptions {
  * @param options - The options for the API call
  * @returns The response from the API
  */
-export async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamResultSchema>;
+export async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema>;
 
 /**
  * Call the text to 3D API
@@ -135,9 +142,9 @@ export async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DOption
  * @param options - The options for the API call
  * @returns The response from the API
  */
-export async function textTo3D(task: RefineTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamResultSchema>;
+export async function textTo3D(task: RefineTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema>;
 
-export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamResultSchema> {
+export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema> {
   // use fetch to call the api
   const headers = { Authorization: `Bearer ${API_KEY}` };
   const response = await fetch("https://api.meshy.ai/openapi/v2/text-to-3d", {
@@ -157,8 +164,8 @@ export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptio
   return await waitForTaskToFinish(taskId, options);
 }
 
-function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise<TaskStreamResultSchema> {
-  return new Promise<TaskStreamResultSchema>((resolve, reject) => {
+function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema> {
+  return new Promise<TaskStreamFinishResultSchema>((resolve, reject) => {
     // due to EventSource does not support Headers, we need to manually add it to the URL
     const eventSource = new EventSourcePolyfill (
       `https://api.meshy.ai/openapi/v2/text-to-3d/${taskId}/stream`,

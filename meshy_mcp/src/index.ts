@@ -17,6 +17,12 @@ const previewResult = await textTo3D({
   },
 });
 
+console.log(previewResult);
+
+if (previewResult.status !== "SUCCEEDED") {
+  throw new Error("Preview failed");
+}
+
 const refineResult = await textTo3D({
   mode: "refine",
   preview_task_id: previewResult.id,
@@ -29,3 +35,7 @@ const refineResult = await textTo3D({
 });
 
 console.log(refineResult);
+
+if (refineResult.status !== "SUCCEEDED") {
+  throw new Error("Refine failed");
+}
