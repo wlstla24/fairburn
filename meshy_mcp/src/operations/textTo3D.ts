@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { API_KEY } from "../common/apiKey.js";
-import { EventSource } from "eventsource";
+import { EventSourcePolyfill } from "event-source-polyfill";
 
 export type TaskId = string;
 
@@ -56,60 +56,11 @@ export const taskCreateResultSchema = z.object({
 });
 export type TaskCreateResultSchema = z.infer<typeof taskCreateResultSchema>;
 
-// // Error event example
-// event: error
-// data: {
-//   "status_code": 404,
-//   "message": "Task not found"
-// }
-
-// // Message event examples illustrate task progress.
-// // For PENDING or IN_PROGRESS tasks, the response stream will not include all fields.
-// event: message
-// data: {
-//   "id": "018a210d-8ba4-705c-b111-1f1776f7f578",
-//   "progress": 0,
-//   "status": "PENDING"
-// }
-
-// event: message
-// data: {
-//   "id": "018a210d-8ba4-705c-b111-1f1776f7f578",
-//   "progress": 50,
-//   "status": "IN_PROGRESS"
-// }
-
-// event: message
-// data: {
-// "id": "018a210d-8ba4-705c-b111-1f1776f7f578",
-// "progress": 100,
-// "status": "SUCCEEDED",
-// "created_at": 1692771650657,
-// "started_at": 1692771667037,
-// "finished_at": 1692771669037,
-// "model_urls": {
-//   "glb": "https://assets.meshy.ai/***/tasks/018a210d-8ba4-705c-b111-1f1776f7f578/output/model.glb?Expires=***"
-// },
-// "texture_urls": [
-//   {
-//     "base_color": "https://assets.meshy.ai/***/tasks/018a210d-8ba4-705c-b111-1f1776f7f578/output/texture_0.png?Expires=***",
-//     "metallic": "https://assets.meshy.ai/***/tasks/018a210d-8ba4-705c-b111-1f1776f7f578/output/texture_0_metallic.png?Expires=XXX",
-//     "normal": "https://assets.meshy.ai/***/tasks/018a210d-8ba4-705c-b111-1f1776f7f578/output/texture_0_roughness.png?Expires=XXX",
-//     "roughness": "https://assets.meshy.ai/***/tasks/018a210d-8ba4-705c-b111-1f1776f7f578/output/texture_0_normal.png?Expires=XXX"
-//   }
-// ],
-// "preceding_tasks": 0,
-// "task_error": {
-//     "message": ""
-//   }
-// }
-
-
-export const taskStreamErrorSchema = z.object({
-  status_code: z.number(),
-  message: z.string(),
-});
-export type TaskStreamErrorSchema = z.infer<typeof taskStreamErrorSchema>;
+// export const taskStreamErrorSchema = z.object({
+//   status_code: z.number(),
+//   message: z.string(),
+// });
+// export type TaskStreamErrorSchema = z.infer<typeof taskStreamErrorSchema>;
 
 export const taskStreamResultBaseSchema = z.object({
   id: z.string(),
@@ -165,26 +116,6 @@ export const taskStreamResultSchema = z.discriminatedUnion("status", [
 ]);
 export type TaskStreamResultSchema = z.infer<typeof taskStreamResultSchema>;
 
-
-// example of streaming response from the docs
-
-// const eventSource = new EventSource(
-//     'https://api.meshy.ai/openapi/v2/text-to-3d/018a210d-8ba4-705c-b111-1f1776f7f578/stream',
-//       {
-//         headers: { Authorization: `Bearer ${YOUR_API_KEY}` }
-//       }
-//     );
-    
-//     eventSource.onmessage = (event) => {
-//       const data = JSON.parse(event.data);
-//       console.log(data);
-    
-//       // Close stream when task is finished
-//       if (data.status === 'SUCCEEDED' || data.status === 'FAILED' || data.status === 'CANCELED') {
-//         eventSource.close();
-//     }
-// };
-
 export interface TextTo3DOptions {
     onProgress?: (progress: number) => void;
 }
@@ -220,38 +151,62 @@ export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptio
   ).result;
 
   // stream the response
-  const result = await new Promise<TaskStreamResultSchema>((resolve, reject) => {
+  let retryCount = 0;
+  const maxRetries = 3;
+  const retryDelay = 5000;
+  const errors: Error[] = [];
+  while (retryCount < maxRetries) {
+    try {
+      return await waitForTaskToFinish(taskId, options);
+    } catch (error) {
+      errors.push(error as Error);
+      retryCount += 1;
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+  console.error(errors);
+  throw new Error("Task failed after max retries", { cause: errors });
+}
+
+function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise<TaskStreamResultSchema> {
+  return new Promise<TaskStreamResultSchema>((resolve, reject) => {
     // due to EventSource does not support Headers, we need to manually add it to the URL
-    const eventSource = new EventSource(
+    const eventSource = new EventSourcePolyfill (
       `https://api.meshy.ai/openapi/v2/text-to-3d/${taskId}/stream`,
       { 
-        fetch: (input, init) =>
-          fetch(input, {
-            ...init,
-            headers: {
-              ...init?.headers,
-              Authorization: `Bearer ${API_KEY}`,
-            },
-          }),
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+        },
       },
     );
 
-    eventSource.onmessage = (event) => {
-      const data = taskStreamResultSchema.parse(JSON.parse(event.data));
-      if (data.status === "SUCCEEDED" || data.status === "FAILED" || data.status === "CANCELED") {
+    eventSource.onmessage = (event): void => {
+      const parseResult = taskStreamResultSchema.safeParse(JSON.parse(event.data));
+      if (parseResult.success) {
+        const data = parseResult.data;
+        if (data.status === "SUCCEEDED" || data.status === "FAILED" || data.status === "CANCELED") {
+          eventSource.close();
+          resolve(data);
+        } else if (data.status === "IN_PROGRESS") {
+          options?.onProgress?.(data.progress);
+        } else if (data.status === "PENDING") {
+          // do nothing
+        } else {
+          console.error(data);
+          eventSource.close();
+          reject(new Error("Unknown task status"));
+        }
+      } else {
+        console.error(parseResult.error);
         eventSource.close();
-        resolve(data);
-      } else if (data.status === "IN_PROGRESS") {
-        options?.onProgress?.(data.progress);
+        reject(new Error("Failed to parse task stream result"));
       }
     };
-        
-    eventSource.onerror = (event: Event) => {
-      taskStreamErrorSchema; event;
+
+    eventSource.onerror = (event): void => {
       eventSource.close();
+      console.error(event);
       reject(new Error("EventSource error occurred"));
     };
   });
-
-  return result;
 }
