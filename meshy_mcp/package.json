@@ -15,6 +15,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
+    "eventsource": "^3.0.6",
     "zod": "^3.24.2"
   },
   "devDependencies": {
