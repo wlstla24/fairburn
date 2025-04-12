@@ -16,20 +16,20 @@ const previewTaskSchema = baseTaskSchema.extend({
     .describe("Describe what kind of object the 3D model is. Maximum 600 characters."),
   art_style: z.enum(["realistic", "sculpture"]).default("realistic")
     .describe("Describe your desired art style of the object. Default to realistic if not specified."),
-  seed: z.number().int()
+  seed: z.number().int().optional()
     .describe("When you use the same prompt and seed, you will generate the same result."),
   ai_model: z.enum(["meshy-4", "latest"]).default("meshy-4")
     .describe("ID of the model to use. Default to meshy-4 if not specified."),
   topology: z.enum(["quad", "triangle"]).default("triangle")
     .describe("Specify the topology of the generated model. Default to triangle if not specified."),
-  target_polycount: z.number().int().min(100).max(300000)
+  target_polycount: z.number().int().min(100).max(300000).default(30000)
     .describe("Specify the target number of polygons in the generated model. The actual number of polygons may deviate from the target depending on the complexity of the geometry."),
-  should_remesh: z.boolean()
+  should_remesh: z.boolean().default(true)
     .describe("Flag controls whether to enable the remesh phase."),
   symmetry_mode: z.enum(["off", "auto", "on"]).default("auto")
     .describe("Controls symmetry mode: off (disables), auto (automatic determination), or on (enforces symmetry)"),
 });
-export type PreviewTaskSchema = z.infer<typeof previewTaskSchema>;
+export type PreviewTaskSchema = z.input<typeof previewTaskSchema>;
 
 // Refine task schema
 const refineTaskSchema = baseTaskSchema.extend({
@@ -41,26 +41,26 @@ const refineTaskSchema = baseTaskSchema.extend({
   texture_prompt: z.string().max(600).optional()
     .describe("Provide an additional text prompt to guide the texturing process. Maximum 600 characters."),
 });
-export type RefineTaskSchema = z.infer<typeof refineTaskSchema>;
+export type RefineTaskSchema = z.input<typeof refineTaskSchema>;
 
 // Discriminated union for all task types
 export const textTo3DTaskSchema = z.discriminatedUnion("mode", [
   previewTaskSchema,
   refineTaskSchema,
 ]);
-export type TextTo3DTaskSchema = z.infer<typeof textTo3DTaskSchema>;
+export type TextTo3DTaskSchema = z.input<typeof textTo3DTaskSchema>;
 
 // Response schemas
 export const taskCreateResultSchema = z.object({
   result: z.string(),
 });
-export type TaskCreateResultSchema = z.infer<typeof taskCreateResultSchema>;
+export type TaskCreateResultSchema = z.output<typeof taskCreateResultSchema>;
 
 // export const taskStreamErrorSchema = z.object({
 //   status_code: z.number(),
 //   message: z.string(),
 // });
-// export type TaskStreamErrorSchema = z.infer<typeof taskStreamErrorSchema>;
+// export type TaskStreamErrorSchema = z.output<typeof taskStreamErrorSchema>;
 
 export const taskStreamResultBaseSchema = z.object({
   id: z.string(),
@@ -75,7 +75,7 @@ export const taskStreamResultPendingSchema = taskStreamResultBaseSchema.extend({
 export const taskStreamResultInProgressSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("IN_PROGRESS"),
   progress: z.number(),
-  started_at: z.number(),
+  // started_at: z.number(),
 });
 
 export const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend({
@@ -84,23 +84,24 @@ export const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend
   started_at: z.number(),
   finished_at: z.number(),
   model_urls: z.record(z.string(), z.string()),
+  thumbnail_url: z.string(),
+  video_url: z.string(),
   texture_urls: z.array(z.object({
     base_color: z.string(),
     metallic: z.string(),
     roughness: z.string(),
     normal: z.string(),
   })),
-  preceding_tasks: z.number(),
   task_error: z.object({
     message: z.string(),
-  }).optional(),
+  }).nullable(),
 });
 
 export const taskStreamResultFailedSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("FAILED"),
   task_error: z.object({
     message: z.string(),
-  }),
+  }).nullable(),
 });
 
 export const taskStreamResultCanceledSchema = taskStreamResultBaseSchema.extend({
@@ -114,7 +115,7 @@ export const taskStreamResultSchema = z.discriminatedUnion("status", [
   taskStreamResultFailedSchema,
   taskStreamResultCanceledSchema,
 ]);
-export type TaskStreamResultSchema = z.infer<typeof taskStreamResultSchema>;
+export type TaskStreamResultSchema = z.output<typeof taskStreamResultSchema>;
 
 export interface TextTo3DOptions {
     onProgress?: (progress: number) => void;
@@ -150,22 +151,10 @@ export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptio
     await response.json(),
   ).result;
 
+  console.log(`task created: ${taskId}`);
+
   // stream the response
-  let retryCount = 0;
-  const maxRetries = 3;
-  const retryDelay = 5000;
-  const errors: Error[] = [];
-  while (retryCount < maxRetries) {
-    try {
-      return await waitForTaskToFinish(taskId, options);
-    } catch (error) {
-      errors.push(error as Error);
-      retryCount += 1;
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
-    }
-  }
-  console.error(errors);
-  throw new Error("Task failed after max retries", { cause: errors });
+  return await waitForTaskToFinish(taskId, options);
 }
 
 function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise<TaskStreamResultSchema> {
@@ -173,40 +162,23 @@ function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise
     // due to EventSource does not support Headers, we need to manually add it to the URL
     const eventSource = new EventSourcePolyfill (
       `https://api.meshy.ai/openapi/v2/text-to-3d/${taskId}/stream`,
-      { 
-        headers: {
-          Authorization: `Bearer ${API_KEY}`,
-        },
-      },
+      { headers: { Authorization: `Bearer ${API_KEY}` } },
     );
 
     eventSource.onmessage = (event): void => {
-      const parseResult = taskStreamResultSchema.safeParse(JSON.parse(event.data));
-      if (parseResult.success) {
-        const data = parseResult.data;
-        if (data.status === "SUCCEEDED" || data.status === "FAILED" || data.status === "CANCELED") {
-          eventSource.close();
-          resolve(data);
-        } else if (data.status === "IN_PROGRESS") {
-          options?.onProgress?.(data.progress);
-        } else if (data.status === "PENDING") {
-          // do nothing
-        } else {
-          console.error(data);
-          eventSource.close();
-          reject(new Error("Unknown task status"));
-        }
-      } else {
-        console.error(parseResult.error);
+      const data = taskStreamResultSchema.parse(JSON.parse(event.data));
+      if (data.status === "SUCCEEDED" || data.status === "FAILED" || data.status === "CANCELED") {
         eventSource.close();
-        reject(new Error("Failed to parse task stream result"));
+        resolve(data);
+      } else if (data.status === "IN_PROGRESS") {
+        options?.onProgress?.(data.progress);
+      } else if (data.status === "PENDING") {
+        // do nothing
+      } else {
+        console.error(data);
+        eventSource.close();
+        reject(new Error("Unknown task status"));
       }
-    };
-
-    eventSource.onerror = (event): void => {
-      eventSource.close();
-      console.error(event);
-      reject(new Error("EventSource error occurred"));
     };
   });
 }
