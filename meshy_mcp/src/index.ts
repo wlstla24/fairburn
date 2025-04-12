@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { textTo3D } from "./operations/textTo3D.js";
 
-textTo3D({
+const previewResult = await textTo3D({
   mode: "preview",
   prompt: "A beautiful vase",
   art_style: "realistic",
@@ -15,8 +15,17 @@ textTo3D({
   onProgress: (progress) => {
     console.log(`Progress: ${progress}`);
   },
-}).then((result) => {
-  console.log(result);
-}).catch((error) => {
-  console.error(error);
 });
+
+const refineResult = await textTo3D({
+  mode: "refine",
+  preview_task_id: previewResult.id,
+  enable_pbr: true,
+  texture_prompt: "A beautiful vase with a pattern",
+}, {
+  onProgress: (progress) => {
+    console.log(`Progress: ${progress}`);
+  },
+});
+
+console.log(refineResult);
