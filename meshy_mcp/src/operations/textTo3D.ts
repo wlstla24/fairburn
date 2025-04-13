@@ -10,7 +10,7 @@ const baseTaskSchema = z.object({
 });
 
 // Preview task schema
-const previewTaskSchema = baseTaskSchema.extend({
+export const previewTaskSchema = baseTaskSchema.extend({
   mode: z.literal("preview"),
   prompt: z.string().max(600)
     .describe("Describe what kind of object the 3D model is. Maximum 600 characters."),
@@ -32,7 +32,7 @@ const previewTaskSchema = baseTaskSchema.extend({
 export type PreviewTaskSchema = z.input<typeof previewTaskSchema>;
 
 // Refine task schema
-const refineTaskSchema = baseTaskSchema.extend({
+export const refineTaskSchema = baseTaskSchema.extend({
   mode: z.literal("refine"),
   preview_task_id: z.string()
     .describe("The corresponding preview task id."),
