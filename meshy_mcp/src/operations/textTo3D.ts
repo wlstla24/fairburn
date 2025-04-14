@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { API_KEY } from "../common/apiKey.js";
 import { EventSourcePolyfill } from "event-source-polyfill";
+import { downloadFromUrl } from "../common/downloadFromUrl.js";
+import path from "path";
 
-export type TaskId = string;
+type TaskId = string;
 
 // Base task schema with common fields
 const baseTaskSchema = z.object({
@@ -10,7 +12,7 @@ const baseTaskSchema = z.object({
 });
 
 // Preview task schema
-export const previewTaskSchema = baseTaskSchema.extend({
+const previewTaskSchema = baseTaskSchema.extend({
   mode: z.literal("preview"),
   prompt: z.string().max(600)
     .describe("Describe what kind of object the 3D model is. Maximum 600 characters."),
@@ -29,10 +31,10 @@ export const previewTaskSchema = baseTaskSchema.extend({
   symmetry_mode: z.enum(["off", "auto", "on"]).default("auto")
     .describe("Controls symmetry mode: off (disables), auto (automatic determination), or on (enforces symmetry)"),
 });
-export type PreviewTaskSchema = z.input<typeof previewTaskSchema>;
+type PreviewTaskSchema = z.input<typeof previewTaskSchema>;
 
 // Refine task schema
-export const refineTaskSchema = baseTaskSchema.extend({
+const refineTaskSchema = baseTaskSchema.extend({
   mode: z.literal("refine"),
   preview_task_id: z.string()
     .describe("The corresponding preview task id."),
@@ -41,44 +43,36 @@ export const refineTaskSchema = baseTaskSchema.extend({
   texture_prompt: z.string().max(600).optional()
     .describe("Provide an additional text prompt to guide the texturing process. Maximum 600 characters."),
 });
-export type RefineTaskSchema = z.input<typeof refineTaskSchema>;
-
-// Discriminated union for all task types
-export const textTo3DTaskSchema = z.discriminatedUnion("mode", [
-  previewTaskSchema,
-  refineTaskSchema,
-]);
-export type TextTo3DTaskSchema = z.input<typeof textTo3DTaskSchema>;
+type RefineTaskSchema = z.input<typeof refineTaskSchema>;
 
 // Response schemas
-export const taskCreateResultSchema = z.object({
+const taskCreateResultSchema = z.object({
   result: z.string(),
 });
-export type TaskCreateResultSchema = z.output<typeof taskCreateResultSchema>;
 
-// export const taskStreamErrorSchema = z.object({
+// const taskStreamErrorSchema = z.object({
 //   status_code: z.number(),
 //   message: z.string(),
 // });
-// export type TaskStreamErrorSchema = z.output<typeof taskStreamErrorSchema>;
+// type TaskStreamErrorSchema = z.output<typeof taskStreamErrorSchema>;
 
-export const taskStreamResultBaseSchema = z.object({
+const taskStreamResultBaseSchema = z.object({
   id: z.string(),
   progress: z.number(),
   // status: z.enum(["PENDING", "IN_PROGRESS", "SUCCEEDED", "FAILED", "CANCELED"]),
 });
 
-export const taskStreamResultPendingSchema = taskStreamResultBaseSchema.extend({
+const taskStreamResultPendingSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("PENDING"),
 });
 
-export const taskStreamResultInProgressSchema = taskStreamResultBaseSchema.extend({
+const taskStreamResultInProgressSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("IN_PROGRESS"),
   progress: z.number(),
   // started_at: z.number(),
 });
 
-export const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend({
+const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("SUCCEEDED"),
   created_at: z.number(),
   started_at: z.number(),
@@ -87,44 +81,40 @@ export const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend
   thumbnail_url: z.string(),
   video_url: z.string(),
   texture_urls: z.array(z.object({
-    base_color: z.string(),
-    metallic: z.string(),
-    roughness: z.string(),
-    normal: z.string(),
+    base_color: z.string().optional(),
+    metallic: z.string().optional(),
+    roughness: z.string().optional(),
+    normal: z.string().optional(),
   })),
   task_error: z.object({
     message: z.string(),
   }).nullable(),
 });
 
-export const taskStreamResultFailedSchema = taskStreamResultBaseSchema.extend({
+const taskStreamResultFailedSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("FAILED"),
   task_error: z.object({
     message: z.string(),
   }).nullable(),
 });
 
-export const taskStreamResultCanceledSchema = taskStreamResultBaseSchema.extend({
+const taskStreamResultCanceledSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("CANCELED"),
 });
 
-export const taskStreamResultSchema = z.discriminatedUnion("status", [
+const taskStreamResultSchema = z.discriminatedUnion("status", [
   taskStreamResultPendingSchema,
   taskStreamResultInProgressSchema,
   taskStreamResultSucceededSchema,
   taskStreamResultFailedSchema,
   taskStreamResultCanceledSchema,
 ]);
-export type TaskStreamResultSchema = z.output<typeof taskStreamResultSchema>;
 
-export const taskStreamFinishResultSchema = z.discriminatedUnion("status", [
-  taskStreamResultSucceededSchema,
-  taskStreamResultFailedSchema,
-  taskStreamResultCanceledSchema,
-]);
-export type TaskStreamFinishResultSchema = z.output<typeof taskStreamFinishResultSchema>;
+type TaskStreamFinishResultSchema = z.output<typeof taskStreamResultSucceededSchema> |
+  z.output<typeof taskStreamResultFailedSchema> |
+  z.output<typeof taskStreamResultCanceledSchema>;
 
-export interface TextTo3DOptions {
+interface TextTo3DInternalOptions {
     onProgress?: (progress: number) => void;
 }
 
@@ -134,7 +124,7 @@ export interface TextTo3DOptions {
  * @param options - The options for the API call
  * @returns The response from the API
  */
-export async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema>;
+async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DInternalOptions): Promise<TaskStreamFinishResultSchema>;
 
 /**
  * Call the text to 3D API
@@ -142,9 +132,9 @@ export async function textTo3D(task: PreviewTaskSchema, options?: TextTo3DOption
  * @param options - The options for the API call
  * @returns The response from the API
  */
-export async function textTo3D(task: RefineTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema>;
+async function textTo3D(task: RefineTaskSchema, options?: TextTo3DInternalOptions): Promise<TaskStreamFinishResultSchema>;
 
-export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema> {
+async function textTo3D(task: PreviewTaskSchema | RefineTaskSchema, options?: TextTo3DInternalOptions): Promise<TaskStreamFinishResultSchema> {
   // use fetch to call the api
   const headers = { Authorization: `Bearer ${API_KEY}` };
   const response = await fetch("https://api.meshy.ai/openapi/v2/text-to-3d", {
@@ -164,7 +154,7 @@ export async function textTo3D(task: TextTo3DTaskSchema, options?: TextTo3DOptio
   return await waitForTaskToFinish(taskId, options);
 }
 
-function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise<TaskStreamFinishResultSchema> {
+function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DInternalOptions): Promise<TaskStreamFinishResultSchema> {
   return new Promise<TaskStreamFinishResultSchema>((resolve, reject) => {
     // due to EventSource does not support Headers, we need to manually add it to the URL
     const eventSource = new EventSourcePolyfill (
@@ -189,3 +179,62 @@ function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DOptions): Promise
     };
   });
 }
+
+export const textTo3DMergedTaskSchema = previewTaskSchema.merge(refineTaskSchema).omit({
+  mode: true,
+  preview_task_id: true,
+});
+export type TextTo3DMergedTaskSchema = z.input<typeof textTo3DMergedTaskSchema>;
+
+interface TextTo3DOptions {
+  onProgress?: (step: "preview" | "refine", progress: number) => void;
+}
+
+export async function textTo3DMerged(
+  task: TextTo3DMergedTaskSchema,
+  outputPath: string,
+  fileName: string,
+  options?: TextTo3DOptions,
+): Promise<void> {
+  const mergedTask = textTo3DMergedTaskSchema.parse(task);
+
+  const previewTask: PreviewTaskSchema = {
+    mode: "preview",
+    ...mergedTask,
+  };
+
+  const previewResult = await textTo3D(previewTask, {
+    onProgress: (progress) => {
+      options?.onProgress?.("preview", progress);
+    },
+  });
+
+  if (previewResult.status !== "SUCCEEDED") {
+    throw new Error("Preview failed");
+  }
+
+  const refineTask: RefineTaskSchema = {
+    mode: "refine",
+    preview_task_id: previewResult.id,
+    ...mergedTask,
+  };
+
+  const refineResult = await textTo3D(refineTask, {
+    onProgress: (progress) => {
+      options?.onProgress?.("refine", progress);
+    },
+  });
+
+  if (refineResult.status !== "SUCCEEDED") {
+    throw new Error("Refine failed");
+  }
+
+  await Promise.all([
+    // download the model
+    downloadFromUrl(refineResult.model_urls["glb"], path.join(outputPath, fileName + ".glb")),
+    // download the thumbnail
+    downloadFromUrl(refineResult.thumbnail_url, path.join(outputPath, fileName + ".png")),
+    // download the video
+    downloadFromUrl(refineResult.video_url, path.join(outputPath, fileName + ".mp4")),
+  ]);
+} 

@@ -7,123 +7,126 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { textTo3DMerged, textTo3DMergedTaskSchema } from "./operations/textTo3D.js";
+import path from "path";
 
-import { textTo3D, PreviewTaskSchema, RefineTaskSchema } from "./operations/textTo3D.js";
-
-// Version information
-const VERSION = "1.0.0";
-
-const server = new Server(
-  {
-    name: "meshy-mcp-server",
-    version: VERSION,
-  },
-  {
-    capabilities: {
-      tools: {},
+export function createServer(): {
+  server: Server;
+  cleanup: () => Promise<void>;
+  } {
+  const server = new Server(
+    {
+      name: "meshy-mcp-server",
+      version: "1.0.0",
     },
-  },
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    },
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async() => {
-  // Get the Zod schemas from textTo3D operations
-  // Here we're creating schemas that match the exported types
-  const previewSchema = z.object({
-    mode: z.literal("preview"),
-    prompt: z.string().max(600),
-    art_style: z.enum(["realistic", "sculpture"]).optional(),
-    seed: z.number().int().optional(),
-    ai_model: z.enum(["meshy-4", "latest"]).optional(),
-    topology: z.enum(["quad", "triangle"]).optional(),
-    target_polycount: z.number().int().min(100).max(300000).optional(),
-    should_remesh: z.boolean().optional(),
-    symmetry_mode: z.enum(["off", "auto", "on"]).optional(),
+  // Schema for the textTo3D tool input
+  const TextTo3DToolSchema = textTo3DMergedTaskSchema.extend({
+    outputPath: z.string().describe("The absolute path to the directory where the generated files will be saved"),
+    fileName: z.string().describe("The name of the file to save the generated 3D model as (without extension)"),
+  }).refine((data) => { // check file system naming conventions
+    return data.fileName.match(/^[a-zA-Z0-9_-]+$/);
+  }, {
+    message: "The file name must contain only alphanumeric characters, underscores, and hyphens",
+  }).refine((data) => { // check filename is not containing extension
+    return !path.extname(data.fileName).length;
+  }, {
+    message: "The file name must not contain an extension",
   });
 
-  const refineSchema = z.object({
-    mode: z.literal("refine"),
-    preview_task_id: z.string(),
-    enable_pbr: z.boolean().optional(),
-    texture_prompt: z.string().max(600).optional(),
+  server.setRequestHandler(ListToolsRequestSchema, async() => {
+    return {
+      tools: [
+        {
+          name: "text_to_3d",
+          description: "Generate a 3D model from text description",
+          inputSchema: zodToJsonSchema(TextTo3DToolSchema),
+        },
+      ],
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async(request) => {
+    try {
+      if (!request.params.arguments) {
+        throw new Error("Arguments are required");
+      }
+
+      if (request.params.name === "text_to_3d") {
+        const args = TextTo3DToolSchema.parse(request.params.arguments);
+        const { outputPath, fileName, ...taskArgs } = args;
+
+        try {
+          await textTo3DMerged(taskArgs, outputPath, fileName, {
+            onProgress: (step, progress) => {
+              console.log("Progress", step, progress);
+              // Send progress notification
+              if (request.params._meta?.progressToken !== undefined) {
+                server.notification({
+                  method: "notifications/progress",
+                  params: {
+                    progress: step === "preview" ? progress * 0.5 : 50 + progress * 0.5,
+                    total: 100,
+                    progressToken: request.params._meta.progressToken,
+                    message: `${step === "preview" ? "Previewing" : "Refining"} 3D model (${Math.round(progress)}%)`,
+                  },
+                });
+              }
+            },
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Successfully generated 3D model at ${outputPath}`,
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          throw new Error(`Failed to generate 3D model: ${errorMessage}`);
+        }
+      }
+
+      throw new Error(`Unknown tool: ${request.params.name}`);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new Error(`Invalid input: ${JSON.stringify(error.errors)}`);
+      }
+      throw error;
+    }
   });
 
   return {
-    tools: [
-      {
-        name: "text_to_3d_preview",
-        description: "Create a preview 3D model from a text prompt",
-        inputSchema: zodToJsonSchema(previewSchema),
-      },
-      {
-        name: "text_to_3d_refine",
-        description: "Refine a previously generated 3D model with textures",
-        inputSchema: zodToJsonSchema(refineSchema),
-      },
-    ],
+    server,
+    cleanup: async(): Promise<void> => {
+      await server.close();
+    },
   };
-});
-
-server.setRequestHandler(CallToolRequestSchema, async(request) => {
-  try {
-    if (!request.params.arguments) {
-      throw new Error("Arguments are required");
-    }
-
-    switch (request.params.name) {
-    case "text_to_3d_preview": {
-      // Ensure arguments match the PreviewTaskSchema type
-      const args = {
-        mode: "preview",
-        ...request.params.arguments,
-      } as PreviewTaskSchema;
-        
-      const result = await textTo3D(args, {
-        onProgress: (progress) => {
-          console.error(`Preview progress: ${progress}`);
-        },
-      });
-        
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    }
-
-    case "text_to_3d_refine": {
-      // Ensure arguments match the RefineTaskSchema type
-      const args = {
-        mode: "refine",
-        ...request.params.arguments,
-      } as RefineTaskSchema;
-        
-      const result = await textTo3D(args, {
-        onProgress: (progress) => {
-          console.error(`Refine progress: ${progress}`);
-        },
-      });
-        
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    }
-
-    default:
-      throw new Error(`Unknown tool: ${request.params.name}`);
-    }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new Error(`Invalid input: ${JSON.stringify(error.errors)}`);
-    }
-    throw error;
-  }
-});
+}
 
 async function runServer(): Promise<void> {
+  const { server, cleanup } = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Meshy MCP Server running on stdio");
+
+  // Cleanup on exit
+  process.on("SIGINT", async(): Promise<void> => {
+    await cleanup();
+    await server.close();
+    process.exit(0);
+  });
 }
 
 runServer().catch((error) => {
   console.error("Fatal error in main():", error);
   process.exit(1);
-});
+}); 

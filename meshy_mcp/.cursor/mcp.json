@@ -1,0 +1,10 @@
+{
+  "mcpServers": {   
+    "Everything MCP": {
+      "url": "http://localhost:3001/sse"
+    },
+    "meshy-mcp": {
+      "url": "http://localhost:3031/sse"
+    }
+  }
+}
