@@ -38,6 +38,10 @@ export function createServer(): {
     return !path.extname(data.fileName).length;
   }, {
     message: "The file name must not contain an extension",
+  }).refine((data) => { // check output path is absolute
+    return path.isAbsolute(data.outputPath);
+  }, {
+    message: "The output path must be an absolute path",
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async() => {
@@ -62,8 +66,21 @@ export function createServer(): {
         const args = TextTo3DToolSchema.parse(request.params.arguments);
         const { outputPath, fileName, ...taskArgs } = args;
 
+        let finalOutputPath = outputPath;
+        // if windows
+        if (process.platform === "win32") {
+          // transform /c:/ to C:\
+          finalOutputPath = outputPath.replace(/\/([a-zA-Z]):/, "$1:\\");
+          // transform /c%3A/ to C:\
+          finalOutputPath = finalOutputPath.replace(/\/([a-zA-Z])%3A/, "$1:\\");
+        }
+        // normalize the path
+        finalOutputPath = path.normalize(finalOutputPath);
+
+        console.log("Starting text to 3D generation with args", taskArgs, "to", finalOutputPath);
+
         try {
-          await textTo3DMerged(taskArgs, outputPath, fileName, {
+          await textTo3DMerged(taskArgs, finalOutputPath, fileName, {
             onProgress: (step, progress) => {
               console.log("Progress", step, progress);
               // Send progress notification
