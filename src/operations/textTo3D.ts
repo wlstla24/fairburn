@@ -148,7 +148,7 @@ async function textTo3D(task: PreviewTaskSchema | RefineTaskSchema, options?: Te
     await response.json(),
   ).result;
 
-  console.log(`task created: ${taskId}`);
+  console.error(`task created: ${taskId}`);
 
   // stream the response
   return await waitForTaskToFinish(taskId, options);

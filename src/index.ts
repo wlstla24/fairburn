@@ -83,12 +83,12 @@ export function createServer(): {
         // normalize the path
         finalOutputPath = path.normalize(finalOutputPath);
 
-        console.log("Starting text to 3D generation with args", taskArgs, "to", finalOutputPath);
+        console.error("Starting text to 3D generation with args", taskArgs, "to", finalOutputPath);
 
         try {
           await textTo3DMerged(taskArgs, finalOutputPath, fileName, {
             onProgress: (step, progress) => {
-              console.log("Progress", step, progress);
+              console.error("Progress", step, progress);
               // Send progress notification
               if (request.params._meta?.progressToken !== undefined) {
                 server.notification({
