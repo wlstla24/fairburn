@@ -28,20 +28,26 @@ export function createServer(): {
 
   // Schema for the textTo3D tool input
   const TextTo3DToolSchema = textTo3DMergedTaskSchema.extend({
-    outputPath: z.string().describe("The absolute path to the directory where the generated files will be saved"),
-    fileName: z.string().describe("The name of the file to save the generated 3D model as (without extension)"),
-  }).refine((data) => { // check file system naming conventions
-    return data.fileName.match(/^[a-zA-Z0-9_-]+$/);
-  }, {
-    message: "The file name must contain only alphanumeric characters, underscores, and hyphens",
-  }).refine((data) => { // check filename is not containing extension
-    return !path.extname(data.fileName).length;
-  }, {
-    message: "The file name must not contain an extension",
-  }).refine((data) => { // check output path is absolute
-    return path.isAbsolute(data.outputPath);
-  }, {
-    message: "The output path must be an absolute path",
+    outputPath: z.string() 
+      .describe(
+        process.platform === "win32"
+          ? "The absolute path to the directory where the generated files will be saved (e.g. C:/path/to/output) and there is several options for root path (C:/, Downloads/, Desktop/)"
+          : "The absolute path to the directory where the generated files will be saved (e.g. /path/to/output) and there is several options for root path (/home/user/, ~/Downloads/, ~/Desktop/)"
+      ).refine((data) => { // check output path is absolute
+        return path.isAbsolute(data);
+      }, {
+        message: "The output path must be an absolute path",
+      }),
+    fileName: z.string().describe("The name of the file to save the generated 3D model as (without extension)")
+      .refine((data) => { // check file system naming conventions
+        return data.match(/^[a-zA-Z0-9_-]+$/);
+      }, {
+        message: "The file name must contain only alphanumeric characters, underscores, and hyphens",
+      }).refine((data) => { // check filename is not containing extension
+        return !path.extname(data).length;
+      }, {
+        message: "The file name must not contain an extension",
+      })
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async() => {
