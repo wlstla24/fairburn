@@ -14,10 +14,18 @@ app.get("/sse", async(req, res) => {
   await server.connect(transport);
 
   server.onclose = async(): Promise<void> => {
-    await cleanup();
-    await server.close();
-    process.exit(0);
+    console.log("Server closed");
+    // await cleanup();
+    // await server.close();
+    // process.exit(0);
   };
+});
+
+process.on("SIGINT", async(): Promise<void> => {
+  console.log("SIGINT received, cleaning up");
+  await cleanup();
+  await server.close();
+  process.exit(0);
 });
 
 app.post("/message", async(req, res) => {

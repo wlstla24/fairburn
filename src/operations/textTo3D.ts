@@ -210,6 +210,7 @@ export async function textTo3DMerged(
   });
 
   if (previewResult.status !== "SUCCEEDED") {
+    console.error("Preview failed", previewResult);
     throw new Error("Preview failed");
   }
 
@@ -226,8 +227,11 @@ export async function textTo3DMerged(
   });
 
   if (refineResult.status !== "SUCCEEDED") {
+    console.error("Refine failed", refineResult);
     throw new Error("Refine failed");
   }
+
+  console.error("Refine succeeded", refineResult);
 
   await Promise.all([
     // download the model

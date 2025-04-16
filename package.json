@@ -8,7 +8,7 @@
   "scripts": {
     "watch": "tsc --watch",
     "lint": "eslint --fix",
-    "start": "tsx src/index.ts",
+    "start": "tsx src/stdio.ts",
     "start:sse": "tsx src/sse.ts"
   },
   "files": [

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -26,14 +25,66 @@ export function createServer(): {
     },
   );
 
+  function createOutputPathDescription(): string {
+    let description = "The absolute path to the directory where the generated files will be saved\n";
+    if (process.platform === "win32") {
+      description += "(e.g. C:/path/to/output, %USERPROFILE%/Downloads/output, %USERPROFILE%/Desktop/output)\n";
+
+      description += "current available environment variables for path:\n";
+      for (const key in process.env) {
+        if (key.startsWith("USERPROFILE")) {
+          description += `  - ${key}\n`;
+        }
+      }
+    } else {
+      description += "(e.g. /path/to/output, $HOME/Downloads/output, $HOME/Desktop/output)\n";
+
+      description += "current available environment variables for path:\n";
+      for (const key in process.env) {
+        if (key.startsWith("HOME")) {
+          description += `  - ${key}\n`;
+        }
+      }
+    }
+    return description;
+  }
+
+  function resolveEnvVariables(data: string): string {
+    if (process.platform === "win32") {
+      try {
+        return data.replace(/%([^%]+)%/g, (_, p1) => {
+          const env = process.env[p1];
+          if (!env) {
+            throw new Error(`Environment variable ${p1} not found`);
+          }
+          return env;
+        });
+      } catch (error) {
+        console.error("Error resolving environment variables", error);
+        return data;
+      }
+    } else {
+      try {
+        return data.replace(/\$([^/]+)/g, (_, p1) => {
+          const env = process.env[p1];
+          if (!env) {
+            throw new Error(`Environment variable ${p1} not found`);
+          }
+          return env;
+        });
+      } catch (error) {
+        console.error("Error resolving environment variables", error);
+        return data;
+      }
+    }
+  }
+
   // Schema for the textTo3D tool input
   const TextTo3DToolSchema = textTo3DMergedTaskSchema.extend({
     outputPath: z.string() 
-      .describe(
-        process.platform === "win32"
-          ? "The absolute path to the directory where the generated files will be saved (e.g. C:/path/to/output) and there is several options for root path (C:/, Downloads/, Desktop/)"
-          : "The absolute path to the directory where the generated files will be saved (e.g. /path/to/output) and there is several options for root path (/home/user/, ~/Downloads/, ~/Desktop/)"
-      ).refine((data) => { // check output path is absolute
+      .describe(createOutputPathDescription())
+      .transform(resolveEnvVariables)
+      .refine((data) => { // check output path is absolute
         return path.isAbsolute(data);
       }, {
         message: "The output path must be an absolute path",
@@ -47,7 +98,7 @@ export function createServer(): {
         return !path.extname(data).length;
       }, {
         message: "The file name must not contain an extension",
-      })
+      }),
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async() => {
@@ -134,22 +185,3 @@ export function createServer(): {
     },
   };
 }
-
-async function runServer(): Promise<void> {
-  const { server, cleanup } = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Meshy MCP Server running on stdio");
-
-  // Cleanup on exit
-  process.on("SIGINT", async(): Promise<void> => {
-    await cleanup();
-    await server.close();
-    process.exit(0);
-  });
-}
-
-runServer().catch((error) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
-}); 
