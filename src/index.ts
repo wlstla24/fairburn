@@ -204,6 +204,11 @@ export function createServer(): {
                 });
               }
             },
+          }).then(() => {
+            tasks.set(i, {
+              ...tasks.get(i)!,
+              progress: 100,
+            });
           }).catch((error) => {
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`Failed to generate 3D model: ${errorMessage}`);
