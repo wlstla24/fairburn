@@ -13,7 +13,7 @@ type Task = {
   outputPath: string;
   previewTaskId: string | null;
   refineTaskId: string | null;
-  step: "preview" | "refine";
+  step: "preview" | "refine" | "done";
   progress: number;
 };
 
@@ -108,9 +108,11 @@ export function createServer(): {
         }, {
           message: "The file name must not contain an extension",
         }),
-    })).max(8, {
-      message: "You can only generate up to 8 3D models at a time",
-    }),
+    }))
+      .describe("The tasks to generate 3D models from (max 4 at a time) more than 4 will not recommended to use due to the API cost")
+      .max(4, {
+        message: "You can only generate up to 4 3D models at a time",
+      }),
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async() => {
@@ -118,12 +120,12 @@ export function createServer(): {
       tools: [
         {
           name: "text_to_3d",
-          description: "Generate a 3D models from a text description",
-          // "if you want only one model, just pass an array with one element." +
-          // "if you want multiple models, pass an array with multiple elements." +
-          // "each element in the array will processed simultaneously," +
-          // "so if you want to generate multiple models. it's better to pass multiple elements in the array," +
-          // "instead of calling this tool multiple times",
+          description: "Generate a 3D models from a text description" +
+            "if you want only one model, just pass an array with one element." +
+            "if you want multiple models, pass an array with multiple elements." +
+            "each element in the array will processed simultaneously," +
+            "so if you want to generate multiple models. it's better to pass multiple elements in the array," +
+            "instead of calling this tool multiple times",
           inputSchema: zodToJsonSchema(TextTo3DToolSchema),
         },
       ],
@@ -143,17 +145,19 @@ export function createServer(): {
         function addTask(taskIndex: number, outputPath: string): void {
           tasks.set(taskIndex, { outputPath, previewTaskId: null, refineTaskId: null, step: "preview", progress: 0 });
         }
-        function updateAndPrintProgress(taskIndex: number, step: "preview" | "refine", data: TaskStreamResultInProgressSchema): void {
+        function updateAndPrintProgress(taskIndex: number, step: "preview" | "refine" | "done", data?: TaskStreamResultInProgressSchema): void {
           const task = tasks.get(taskIndex);
           if (!task) {
             throw new Error(`Task ${taskIndex} not found`);
           }
           task.step = step;
-          task.progress = data.progress;
-          if (step === "preview") {
-            task.previewTaskId = data.id;
-          } else {
-            task.refineTaskId = data.id;
+          if (data) {
+            task.progress = data.progress;
+            if (step === "preview") {
+              task.previewTaskId = data.id;
+            } else {
+              task.refineTaskId = data.id;
+            }
           }
           let progressMessage = "";
           for (const [taskIndex, progress] of tasks.entries()) {
@@ -164,7 +168,12 @@ export function createServer(): {
             if (progress.refineTaskId) {
               progressMessage += ` (refine: ${progress.refineTaskId})`;
             }
-            progressMessage += `: ${progress.progress}%\n`;
+            if (progress.step === "done") {
+              progressMessage += " (done)";
+            } else {
+              progressMessage += `: ${progress.progress}%`;
+            }
+            progressMessage += "\n";
           }
           console.error(progressMessage);
         }
@@ -205,10 +214,7 @@ export function createServer(): {
               }
             },
           }).then(() => {
-            tasks.set(i, {
-              ...tasks.get(i)!,
-              progress: 100,
-            });
+            updateAndPrintProgress(i, "done");
           }).catch((error) => {
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`Failed to generate 3D model: ${errorMessage}`);

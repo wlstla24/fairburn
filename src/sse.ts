@@ -9,16 +9,8 @@ const { server, cleanup } = createServer();
 let transport: SSEServerTransport;
 
 app.get("/sse", async(req, res) => {
-  console.log("Received connection");
   transport = new SSEServerTransport("/message", res);
   await server.connect(transport);
-
-  server.onclose = async(): Promise<void> => {
-    console.log("Server closed");
-    // await cleanup();
-    // await server.close();
-    // process.exit(0);
-  };
 });
 
 process.on("SIGINT", async(): Promise<void> => {
