@@ -71,6 +71,7 @@ const taskStreamResultInProgressSchema = taskStreamResultBaseSchema.extend({
   progress: z.number(),
   // started_at: z.number(),
 });
+export type TaskStreamResultInProgressSchema = z.output<typeof taskStreamResultInProgressSchema>;
 
 const taskStreamResultSucceededSchema = taskStreamResultBaseSchema.extend({
   status: z.literal("SUCCEEDED"),
@@ -115,7 +116,7 @@ type TaskStreamFinishResultSchema = z.output<typeof taskStreamResultSucceededSch
   z.output<typeof taskStreamResultCanceledSchema>;
 
 interface TextTo3DInternalOptions {
-    onProgress?: (progress: number) => void;
+    onProgress?: (progress: TaskStreamResultInProgressSchema) => void;
 }
 
 /**
@@ -168,7 +169,7 @@ function waitForTaskToFinish(taskId: TaskId, options?: TextTo3DInternalOptions):
         eventSource.close();
         resolve(data);
       } else if (data.status === "IN_PROGRESS") {
-        options?.onProgress?.(data.progress);
+        options?.onProgress?.(data);
       } else if (data.status === "PENDING") {
         // do nothing
       } else {
@@ -187,7 +188,7 @@ export const textTo3DMergedTaskSchema = previewTaskSchema.merge(refineTaskSchema
 export type TextTo3DMergedTaskSchema = z.input<typeof textTo3DMergedTaskSchema>;
 
 interface TextTo3DOptions {
-  onProgress?: (step: "preview" | "refine", progress: number) => void;
+  onProgress?: (step: "preview" | "refine", progress: TaskStreamResultInProgressSchema) => void;
 }
 
 export async function textTo3DMerged(
@@ -230,8 +231,6 @@ export async function textTo3DMerged(
     console.error("Refine failed", refineResult);
     throw new Error("Refine failed");
   }
-
-  console.error("Refine succeeded", refineResult);
 
   await Promise.all([
     // download the model
