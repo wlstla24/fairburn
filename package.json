@@ -6,11 +6,10 @@
     "meshy-mcp": "./build/index.js"
   },
   "scripts": {
-    "build": "tsc && shx chmod 755 build/*.js",
     "watch": "tsc --watch",
     "lint": "eslint --fix",
-    "start": "node build/index.js",
-    "start:sse": "node build/sse.js"
+    "start": "tsx src/index.ts",
+    "start:sse": "tsx src/sse.ts"
   },
   "files": [
     "build"
@@ -20,6 +19,7 @@
     "event-source-polyfill": "^1.0.31",
     "express": "^5.1.0",
     "shx": "^0.4.0",
+    "tsx": "^4.19.3",
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.5"
   },
@@ -29,10 +29,10 @@
     "@stylistic/eslint-plugin-ts": "^4.2.0",
     "@types/event-source-polyfill": "^1.0.5",
     "@types/express": "^5.0.1",
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.14.1",
     "eslint": "^9.24.0",
     "globals": "^16.0.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.29.1"
+    "typescript-eslint": "^8.30.1"
   }
 }
