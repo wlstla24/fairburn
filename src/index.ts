@@ -34,26 +34,26 @@ export function createServer(): {
   );
 
   function createOutputPathDescription(): string {
-    let description = "The absolute path to the directory where the generated files will be saved\n";
-    if (process.platform === "win32") {
-      description += "(e.g. C:/path/to/output, %USERPROFILE%/Downloads/output, %USERPROFILE%/Desktop/output)\n";
+    const description = "The absolute path to the directory where the generated files will be saved\n";
+    // if (process.platform === "win32") {
+    //   description += "(e.g. C:/path/to/output, %USERPROFILE%/Downloads/output, %USERPROFILE%/Desktop/output)\n";
 
-      description += "current available environment variables for path:\n";
-      for (const key in process.env) {
-        if (key.startsWith("USERPROFILE")) {
-          description += `  - ${key}\n`;
-        }
-      }
-    } else {
-      description += "(e.g. /path/to/output, $HOME/Downloads/output, $HOME/Desktop/output)\n";
+    //   description += "current available environment variables for path:\n";
+    //   for (const key in process.env) {
+    //     if (key.startsWith("USERPROFILE")) {
+    //       description += `  - ${key}\n`;
+    //     }
+    //   }
+    // } else {
+    //   description += "(e.g. /path/to/output, $HOME/Downloads/output, $HOME/Desktop/output)\n";
 
-      description += "current available environment variables for path:\n";
-      for (const key in process.env) {
-        if (key.startsWith("HOME")) {
-          description += `  - ${key}\n`;
-        }
-      }
-    }
+    //   description += "current available environment variables for path:\n";
+    //   for (const key in process.env) {
+    //     if (key.startsWith("HOME")) {
+    //       description += `  - ${key}\n`;
+    //     }
+    //   }
+    // }
     return description;
   }
 
@@ -159,7 +159,8 @@ export function createServer(): {
               task.refineTaskId = data.id;
             }
           }
-          let progressMessage = "";
+          let progressMessage = "\n\n\n\n\n";
+          progressMessage += "==========Generating 3D models==========\n";
           for (const [taskIndex, progress] of tasks.entries()) {
             progressMessage += taskIndex;
             if (progress.previewTaskId) {
@@ -175,7 +176,12 @@ export function createServer(): {
             }
             progressMessage += "\n";
           }
-          console.error(progressMessage);
+          progressMessage += "========================================\n";
+          for (let i = 0; i < progressMessage.split("\n").length; i++) {
+            process.stdout.clearLine(0);
+            process.stdout.moveCursor(0, -1);
+          }
+          process.stdout.write(progressMessage);
         }
 
         const promises: Promise<void>[] = [];
