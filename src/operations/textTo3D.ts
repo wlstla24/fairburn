@@ -3,7 +3,7 @@ import { API_KEY } from "../common/apiKey.js";
 import { EventSourcePolyfill } from "event-source-polyfill";
 import { downloadFromUrl } from "../common/downloadFromUrl.js";
 import path from "path";
-import { registerOperation } from "../index.js";
+import { OperationRegistry } from "../operationRegistry.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { Request } from "@modelcontextprotocol/sdk/types.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -336,7 +336,7 @@ const TextTo3DToolSchema = z.object({
     }),
 });
 
-registerOperation({
+OperationRegistry.registerOperation({
   describe: {
     name: "text_to_3d",
     description: "Generate a 3D models from a text description" +

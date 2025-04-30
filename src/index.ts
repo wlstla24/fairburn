@@ -3,26 +3,10 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  Request,
-  Result,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import "./operations/textTo3D.js";
-
-export interface OperationObject {
-  describe: {
-    name: string;
-    description: string;
-    inputSchema: object;
-  };
-  execute: (request: Request, server: Server) => Promise<Result>;
-}
-
-const operations: OperationObject[] = [];
-export function registerOperation(operation: OperationObject): void {
-  operations.push(operation);
-}
-
+import { OperationRegistry } from "./operationRegistry.js";
 export function createServer(): {
   server: Server;
   cleanup: () => Promise<void>;
@@ -41,7 +25,7 @@ export function createServer(): {
 
   server.setRequestHandler(ListToolsRequestSchema, async() => {
     return {
-      tools: operations.map((operation) => ({
+      tools: OperationRegistry.operations.map((operation) => ({
         name: operation.describe.name,
         description: operation.describe.description,
         inputSchema: operation.describe.inputSchema,
@@ -51,7 +35,7 @@ export function createServer(): {
 
   server.setRequestHandler(CallToolRequestSchema, async(request) => {
     try {
-      const operation = operations.find((operation) => operation.describe.name === request.params.name);
+      const operation = OperationRegistry.operations.find((operation) => operation.describe.name === request.params.name);
       if (!operation) {
         throw new Error(`Unknown tool: ${request.params.name}`);
       }
